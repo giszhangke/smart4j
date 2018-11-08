@@ -1,6 +1,7 @@
 package org.smart4j.chapter2.helper;
 
 import org.apache.commons.collections4.functors.ExceptionPredicate;
+import org.apache.commons.dbcp2.BasicDataSource;
 import org.apache.commons.dbutils.QueryRunner;
 import org.apache.commons.dbutils.handlers.BeanHandler;
 import org.apache.commons.dbutils.handlers.BeanListHandler;
@@ -12,6 +13,9 @@ import org.smart4j.chapter2.util.PropsUtil;
 
 import javax.management.Query;
 import javax.management.RuntimeErrorException;
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -26,33 +30,29 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public final class DatabaseHelper {
     private static final Logger LOGGER = LoggerFactory.getLogger(DatabaseHelper.class);
-    private static final String DRIVER;
-    private static final String URL;
-    private static final String USERNAME;
-    private static final String PASSWORD;
-    private static final QueryRunner QUERY_RUNNER = new QueryRunner();
     private static final ThreadLocal<Connection> CONNECTION_HOLDER = new ThreadLocal<>();
+    private static final QueryRunner QUERY_RUNNER = new QueryRunner();
+    private static final BasicDataSource DATA_SOURCE;
 
     static {
         Properties conf = PropsUtil.loadProps("config.properties");
-        DRIVER = conf.getProperty("jdbc.driver");
-        URL = conf.getProperty("jdbc.url");
-        USERNAME = conf.getProperty("jdbc.username");
-        PASSWORD = conf.getProperty("jdbc.password");
+        String driver = conf.getProperty("jdbc.driver");
+        String url = conf.getProperty("jdbc.url");
+        String username = conf.getProperty("jdbc.username");
+        String password = conf.getProperty("jdbc.password");
 
-        try {
-            Class.forName(DRIVER);
-        }
-        catch (ClassNotFoundException e) {
-            LOGGER.error("can not load jdbc driver", e);
-        }
+        DATA_SOURCE = new BasicDataSource();
+        DATA_SOURCE.setDriverClassName(driver);
+        DATA_SOURCE.setUrl(url);
+        DATA_SOURCE.setUsername(username);
+        DATA_SOURCE.setPassword(password);
     }
 
     public static Connection getConnection() {
         Connection conn = CONNECTION_HOLDER.get();
         if (conn == null) {
             try {
-                conn = DriverManager.getConnection(URL, USERNAME, PASSWORD);
+                conn = DATA_SOURCE.getConnection();
             }
             catch (SQLException e) {
                 LOGGER.error("get connection failure", e);
@@ -65,19 +65,18 @@ public final class DatabaseHelper {
         return conn;
     }
 
-    public static void closeConnection() {
-        Connection conn = CONNECTION_HOLDER.get();
-        if (conn != null) {
-            try {
-                conn.close();
+    public static void executeSqlFile(String filePath) {
+        InputStream is = Thread.currentThread().getContextClassLoader().getResourceAsStream(filePath);
+        BufferedReader reader = new BufferedReader(new InputStreamReader(is));
+        try {
+            String sql;
+            while ((sql = reader.readLine()) != null) {
+                DatabaseHelper.executeUpdate(sql);
             }
-            catch (SQLException e) {
-                LOGGER.error("close connection failure", e);
-                throw new RuntimeException(e);
-            }
-            finally {
-                CONNECTION_HOLDER.remove();
-            }
+        }
+        catch (Exception e) {
+            LOGGER.error("execute sql file failure", e);
+            throw new RuntimeException();
         }
     }
 
@@ -91,9 +90,6 @@ public final class DatabaseHelper {
             LOGGER.error("query entity list failure", e);
             throw new RuntimeException(e);
         }
-        finally {
-            closeConnection();
-        }
         return entityList;
     }
 
@@ -106,9 +102,6 @@ public final class DatabaseHelper {
         catch (SQLException e) {
             LOGGER.error("query entity failure", e);
             throw new RuntimeException(e);
-        }
-        finally {
-            closeConnection();
         }
         return entity;
     }
@@ -129,10 +122,6 @@ public final class DatabaseHelper {
             LOGGER.error("execute query failure", e);
             throw new RuntimeException(e);
         }
-        finally {
-            closeConnection();
-        }
-
         return result;
     }
 
@@ -151,9 +140,6 @@ public final class DatabaseHelper {
         catch (SQLException e) {
             LOGGER.error("execute update failure", e);
             throw new RuntimeException(e);
-        }
-        finally {
-            closeConnection();
         }
         return rows;
     }
@@ -187,7 +173,7 @@ public final class DatabaseHelper {
         String sql = "UPDATE " + getTableName(entityClass) + " SET ";
         StringBuilder columns = new StringBuilder();
         for (String fieldName : fieldMap.keySet()) {
-            columns.append(fieldMap).append("=?, ");
+            columns.append(fieldName).append("=?, ");
         }
         sql += columns.substring(0, columns.lastIndexOf(", ")) + " WHERE id=?";
         List<Object> paramList = new ArrayList<>();

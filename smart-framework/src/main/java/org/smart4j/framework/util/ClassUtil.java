@@ -28,6 +28,10 @@ public final class ClassUtil {
         return Thread.currentThread().getContextClassLoader();
     }
 
+    public static Class<?> loadClass(String className) {
+        return loadClass(className, true);
+    }
+
     /**
      * 加载类
      * @param className

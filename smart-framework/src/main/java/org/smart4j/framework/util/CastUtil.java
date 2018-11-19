@@ -30,6 +30,10 @@ public final class CastUtil {
         return result;
     }
 
+    public static long castLong(Object obj) {
+        return castLong(obj, 0L);
+    }
+
     public static long castLong(Object obj, long defaultValue) {
         long result = defaultValue;
         if (obj != null) {

@@ -23,4 +23,12 @@ public final class StringUtil {
         return !isEmpty(str);
     }
 
+    public static String[] splitString(String body, String s) {
+        if (body == null) {
+            return new String[0];
+        }
+        else {
+            return body.split(s);
+        }
+    }
 }
